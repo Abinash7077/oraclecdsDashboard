@@ -37,6 +37,7 @@ export default function OracleStyleCRM() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const fieldListeners = useRef({});
+  const userSubmitHandler = useRef(null);
 
   // Field operations
   const setField = (fieldName, value) => {
@@ -126,6 +127,9 @@ export default function OracleStyleCRM() {
         }
       });
 
+      // Reset submit handler
+      userSubmitHandler.current = null;
+
       const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
       const func = new AsyncFunction(
         'form',
@@ -137,6 +141,7 @@ export default function OracleStyleCRM() {
         'showMessage',
         'getEntityConfig',
         'console',
+        'handleSubmit',
         automationCode
       );
       
@@ -149,11 +154,16 @@ export default function OracleStyleCRM() {
         callAPI,
         showMessage,
         getEntityConfig,
-        mockConsole
+        mockConsole,
+        (submitFn) => { userSubmitHandler.current = submitFn; }
       );
       
-      if (logs.length === 0) {
-        setOutput('✓ Automation executed successfully!');
+      // Execute the submit handler if defined
+      if (userSubmitHandler.current) {
+        mockConsole.log('\n🚀 Executing handleSubmit...\n');
+        await userSubmitHandler.current();
+      } else if (logs.length === 0) {
+        setOutput('✓ Automation executed successfully!\n\n💡 Tip: Use handleSubmit(() => { ... }) to define a submit handler');
       }
     } catch (err) {
       setOutput(`❌ Error: ${err.message}\n\n${err.stack}`);
@@ -174,6 +184,7 @@ export default function OracleStyleCRM() {
     setOutput('');
     setMessages([]);
     fieldListeners.current = {};
+    userSubmitHandler.current = null;
   };
 
   // Get message icon based on type
@@ -297,7 +308,7 @@ export default function OracleStyleCRM() {
               <span className="text-2xl">⚙️</span>
               <div>
                 <h2 className="text-lg font-semibold text-white">Workflow & Automation Engine</h2>
-                <p className="text-xs text-blue-200">Oracle-style Business Logic Builder</p>
+                <p className="text-xs text-blue-200">Define handleSubmit() to bind custom logic to the button</p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -317,6 +328,7 @@ export default function OracleStyleCRM() {
               tabSize: 2
             }}
             spellCheck={false}
+            placeholder="// Write your automation code here..."
           />
 
           {output && (
@@ -334,7 +346,7 @@ export default function OracleStyleCRM() {
 
           <div className="bg-gray-700 px-6 py-4 flex items-center justify-between border-t border-gray-600">
             <div className="text-xs text-gray-300">
-              💡 Define business rules, validations, and workflows above
+              💡 Use handleSubmit(async () =&gt; {`{ ... }`}) to define your submit handler
             </div>
             <div className="flex gap-3">
               <button
