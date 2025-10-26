@@ -1,0 +1,168 @@
+// Oracle-style Business Logic & Automation
+// This is your Workflow Engine - similar to Oracle Workflow Builder
+
+// ========== AVAILABLE APIs ==========
+// form: { customerId, firstName, lastName, email, ... }
+// setField(fieldName, value): Update a field
+// getField(fieldName): Get field value
+// onFieldChange(fieldName, callback): Listen to changes
+// validate(fieldName, rule): Add validation
+// callAPI(url, method, data): HTTP requests
+// showMessage(message, type): Show notification
+// getEntityConfig(): Get field configurations
+// executeWorkflow(workflowName): Run a workflow
+
+// ========== BUSINESS RULES ==========
+
+// Rule 1: Auto-generate Customer ID
+if (!form.customerId) {
+  const timestamp = Date.now();
+  const randomNum = Math.floor(Math.random() * 1000);
+  setField('customerId', \`CUST-\${timestamp}-\${randomNum}\`);
+  console.log('✓ Generated Customer ID');
+}
+
+// Rule 2: Auto-assign based on account value
+onFieldChange('accountValue', (value) => {
+  if (value > 100000) {
+    setField('assignedTo', 'Senior Account Manager');
+    setField('status', 'Active');
+    showMessage('High-value customer assigned to senior manager', 'success');
+  } else if (value > 50000) {
+    setField('assignedTo', 'Account Manager');
+  } else {
+    setField('assignedTo', 'Sales Rep');
+  }
+  console.log(\`Assigned to: \${getField('assignedTo')}\`);
+});
+
+// Rule 3: Email domain validation & company auto-fill
+onFieldChange('email', (value) => {
+  const domain = value.split('@')[1];
+  if (domain) {
+    // Auto-fill company from email domain
+    const company = domain.split('.')[0].toUpperCase();
+    setField('company', company);
+    console.log(\`Auto-filled company: \${company}\`);
+  }
+});
+
+// Rule 4: Full name concatenation
+onFieldChange('firstName', (value) => {
+  const fullName = value + ' ' + form.lastName;
+  console.log('Full Name:', fullName.trim());
+});
+
+onFieldChange('lastName', (value) => {
+  const fullName = form.firstName + ' ' + value;
+  console.log('Full Name:', fullName.trim());
+});
+
+// ========== VALIDATIONS ==========
+function validateCustomer() {
+  const errors = [];
+  
+  // Required field validation
+  if (!form.firstName) errors.push('First Name is required');
+  if (!form.lastName) errors.push('Last Name is required');
+  if (!form.email) errors.push('Email is required');
+  
+  // Email format validation
+  const emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
+  if (form.email && !emailRegex.test(form.email)) {
+    errors.push('Invalid email format');
+  }
+  
+  // Phone validation
+  if (form.phone && form.phone.length < 10) {
+    errors.push('Phone must be at least 10 digits');
+  }
+  
+  if (errors.length > 0) {
+    console.log('❌ Validation Errors:', errors);
+    showMessage(errors.join(', '), 'error');
+    return false;
+  }
+  
+  console.log('✓ Validation passed');
+  return true;
+}
+
+// ========== WORKFLOWS ==========
+
+// Workflow 1: Create Customer
+async function createCustomer() {
+  console.log('Starting Create Customer workflow...');
+  
+  if (!validateCustomer()) return;
+  
+  showMessage('Creating customer...', 'info');
+  
+  const response = await callAPI('/api/customers', 'POST', form);
+  
+  if (response.success) {
+    showMessage('Customer created successfully!', 'success');
+    console.log('Customer ID:', response.data.customerId);
+    
+    // Trigger welcome email workflow
+    await sendWelcomeEmail();
+  } else {
+    showMessage('Failed to create customer', 'error');
+  }
+}
+
+// Workflow 2: Update Customer
+async function updateCustomer() {
+  console.log('Starting Update Customer workflow...');
+  
+  if (!validateCustomer()) return;
+  
+  const response = await callAPI(\`/api/customers/\${form.customerId}\`, 'PUT', form);
+  
+  if (response.success) {
+    showMessage('Customer updated successfully!', 'success');
+  }
+}
+
+// Workflow 3: Send Welcome Email
+async function sendWelcomeEmail() {
+  console.log('Sending welcome email to:', form.email);
+  
+  const emailData = {
+    to: form.email,
+    subject: 'Welcome to our platform!',
+    body: \`Hello \${form.firstName} \${form.lastName}, welcome aboard!\`
+  };
+  
+  await callAPI('/api/emails/send', 'POST', emailData);
+  console.log('✓ Welcome email sent');
+}
+
+// Workflow 4: Search Customer
+async function searchCustomer(searchTerm) {
+  console.log('Searching for:', searchTerm);
+  
+  const response = await callAPI(\`/api/customers/search?q=\${searchTerm}\`, 'GET');
+  
+  if (response.data && response.data.length > 0) {
+    console.log('Found customers:', response.data.length);
+    // Populate form with first result
+    const customer = response.data[0];
+    Object.keys(customer).forEach(key => {
+      if (form.hasOwnProperty(key)) {
+        setField(key, customer[key]);
+      }
+    });
+    showMessage('Customer loaded', 'success');
+  } else {
+    showMessage('No customer found', 'warning');
+  }
+}
+
+// ========== EXECUTE ==========
+// Uncomment to test workflows:
+// createCustomer();
+// updateCustomer();
+// searchCustomer('john@example.com');
+
+console.log('Automation engine ready. Current form state:', form);
