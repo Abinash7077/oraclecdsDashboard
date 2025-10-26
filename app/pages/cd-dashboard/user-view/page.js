@@ -36,19 +36,20 @@ export default function OracleStyleCRM() {
   const [output, setOutput] = useState('');
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
-  const fieldListeners = useRef({});
-  const userSubmitHandler = useRef(null);
+  const userFunctions = useRef({});
 
   // Field operations
   const setField = (fieldName, value) => {
     setFormState(prev => {
       const newState = { ...prev, [fieldName]: value };
       
-      if (fieldListeners.current[fieldName]) {
+      // Dynamically call user-defined onChange function if exists
+      const onChangeFunctionName = `on${fieldName.charAt(0).toUpperCase() + fieldName.slice(1)}Change`;
+      if (userFunctions.current[onChangeFunctionName]) {
         try {
-          fieldListeners.current[fieldName](value, newState);
+          userFunctions.current[onChangeFunctionName](value, newState);
         } catch (err) {
-          console.error('Listener error:', err);
+          console.error(`Error in ${onChangeFunctionName}:`, err);
         }
       }
       
@@ -58,10 +59,6 @@ export default function OracleStyleCRM() {
 
   const getField = (fieldName) => {
     return formState[fieldName];
-  };
-
-  const onFieldChange = (fieldName, callback) => {
-    fieldListeners.current[fieldName] = callback;
   };
 
   const getEntityConfig = () => {
@@ -102,7 +99,7 @@ export default function OracleStyleCRM() {
     });
   };
 
-  // Execute automation code
+  // Execute automation code and register all user functions
   const executeAutomation = async () => {
     setOutput('');
     setLoading(true);
@@ -127,43 +124,59 @@ export default function OracleStyleCRM() {
         }
       });
 
-      // Reset submit handler
-      userSubmitHandler.current = null;
+      // Reset user functions
+      userFunctions.current = {};
 
+      // Create function that captures all user-defined functions
       const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
       const func = new AsyncFunction(
         'form',
         'setField',
         'getField',
-        'onFieldChange',
-        'validate',
         'callAPI',
         'showMessage',
         'getEntityConfig',
         'console',
-        'handleSubmit',
-        automationCode
+        `
+        ${automationCode}
+        
+        // Return all defined functions
+        return {
+          ${automationCode.match(/function\s+(\w+)/g)?.map(m => {
+            const funcName = m.replace('function ', '');
+            return `${funcName}: typeof ${funcName} !== 'undefined' ? ${funcName} : null`;
+          }).join(',\n') || ''}
+        };
+        `
       );
       
-      await func(
+      const definedFunctions = await func(
         formProxy,
         setField,
         getField,
-        onFieldChange,
-        () => true,
         callAPI,
         showMessage,
         getEntityConfig,
-        mockConsole,
-        (submitFn) => { userSubmitHandler.current = submitFn; }
+        mockConsole
       );
       
-      // Execute the submit handler if defined
-      if (userSubmitHandler.current) {
-        mockConsole.log('\n🚀 Executing handleSubmit...\n');
-        await userSubmitHandler.current();
-      } else if (logs.length === 0) {
-        setOutput('✓ Automation executed successfully!\n\n💡 Tip: Use handleSubmit(() => { ... }) to define a submit handler');
+      // Store all user-defined functions
+      userFunctions.current = definedFunctions || {};
+      
+      // Log registered functions
+      const functionNames = Object.keys(definedFunctions || {}).filter(k => definedFunctions[k] !== null);
+      if (functionNames.length > 0) {
+        mockConsole.log('✓ Registered functions:', functionNames.join(', '));
+      }
+      
+      // Call onSubmit if it exists
+      if (userFunctions.current.onSubmit) {
+        mockConsole.log('\n🚀 Executing onSubmit()...\n');
+        await userFunctions.current.onSubmit();
+      }
+      
+      if (logs.length === 0) {
+        setOutput('✓ Automation loaded successfully!\n\n💡 Tip: Define functions like onSubmit(), onFirstNameChange(), etc.');
       }
     } catch (err) {
       setOutput(`❌ Error: ${err.message}\n\n${err.stack}`);
@@ -183,8 +196,38 @@ export default function OracleStyleCRM() {
     }, {}));
     setOutput('');
     setMessages([]);
-    fieldListeners.current = {};
-    userSubmitHandler.current = null;
+    userFunctions.current = {};
+  };
+
+  // Call any user-defined function by name
+  const callUserFunction = async (functionName, ...args) => {
+    if (userFunctions.current[functionName]) {
+      try {
+        const logs = [];
+        const mockConsole = {
+          log: (...args) => {
+            const message = args.map(arg => 
+              typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
+            ).join(' ');
+            logs.push(message);
+            setOutput(prev => prev + message + '\n');
+          }
+        };
+        
+        setOutput('');
+        mockConsole.log(`📞 Calling ${functionName}(${args.map(a => JSON.stringify(a)).join(', ')})...\n`);
+        
+        const result = await userFunctions.current[functionName](...args);
+        
+        if (result !== undefined) {
+          mockConsole.log(`\n✓ ${functionName} returned:`, result);
+        }
+      } catch (err) {
+        setOutput(prev => prev + `\n❌ Error in ${functionName}: ${err.message}`);
+      }
+    } else {
+      showMessage(`Function "${functionName}" is not defined`, 'error');
+    }
   };
 
   // Get message icon based on type
@@ -213,7 +256,7 @@ export default function OracleStyleCRM() {
         {/* Header */}
         <div className="mb-6 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-6 shadow-2xl border border-blue-400">
           <h1 className="text-3xl font-bold text-white mb-2">Oracle-Style CRM Platform</h1>
-          <p className="text-blue-100">Enterprise Customer Management with Workflow Automation</p>
+          <p className="text-blue-100">Enterprise Customer Management with Dynamic Scripting</p>
         </div>
 
         {/* Messages/Notifications */}
@@ -243,7 +286,7 @@ export default function OracleStyleCRM() {
                 {entityConfig.fields.filter(f => f.required).length} Required
               </span>
               <span className="px-3 py-1 bg-purple-900 text-purple-200 rounded text-xs font-semibold">
-                Workflow Enabled
+                {Object.keys(userFunctions.current).filter(k => userFunctions.current[k]).length} Functions Loaded
               </span>
             </div>
           </div>
@@ -295,7 +338,12 @@ export default function OracleStyleCRM() {
                     className="border border-gray-600 rounded h-9 px-3 bg-gray-900 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                 )}
-                <div className="text-xs text-gray-500 font-mono">field: "{field.name}"</div>
+                <div className="text-xs text-gray-500 font-mono">
+                  field: "{field.name}"
+                  {userFunctions.current[`on${field.name.charAt(0).toUpperCase() + field.name.slice(1)}Change`] && 
+                    <span className="ml-2 text-green-400">✓ onChange bound</span>
+                  }
+                </div>
               </div>
             ))}
           </div>
@@ -307,8 +355,8 @@ export default function OracleStyleCRM() {
             <div className="flex items-center gap-3">
               <span className="text-2xl">⚙️</span>
               <div>
-                <h2 className="text-lg font-semibold text-white">Workflow & Automation Engine</h2>
-                <p className="text-xs text-blue-200">Define handleSubmit() to bind custom logic to the button</p>
+                <h2 className="text-lg font-semibold text-white">Dynamic Scripting Engine</h2>
+                <p className="text-xs text-blue-200">Define any function - onSubmit(), onFieldNameChange(), custom functions, etc.</p>
               </div>
             </div>
             <div className="flex gap-2">
@@ -328,7 +376,7 @@ export default function OracleStyleCRM() {
               tabSize: 2
             }}
             spellCheck={false}
-            placeholder="// Write your automation code here..."
+            placeholder="// Define any functions you need..."
           />
 
           {output && (
@@ -344,31 +392,48 @@ export default function OracleStyleCRM() {
             </div>
           )}
 
-          <div className="bg-gray-700 px-6 py-4 flex items-center justify-between border-t border-gray-600">
-            <div className="text-xs text-gray-300">
-              💡 Use handleSubmit(async () =&gt; {`{ ... }`}) to define your submit handler
+          <div className="bg-gray-700 px-6 py-4 border-t border-gray-600">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-xs text-gray-300">
+                💡 Functions auto-bind: onSubmit(), on[FieldName]Change(), or any custom function
+              </div>
             </div>
-            <div className="flex gap-3">
-              <button
-                onClick={clearForm}
-                className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-all font-medium text-sm shadow-lg hover:shadow-xl"
-              >
-                🗑️ Clear Form
-              </button>
-              <button
-                onClick={executeAutomation}
-                disabled={loading}
-                className="px-8 py-2.5 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:from-green-700 hover:to-blue-700 transition-all font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-xl"
-              >
-                {loading ? (
-                  <>
-                    <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                    Executing...
-                  </>
-                ) : (
-                  <>⚡ Run Automation</>
-                )}
-              </button>
+            
+            <div className="flex items-center justify-between">
+              <div className="flex gap-2 flex-wrap">
+                {Object.keys(userFunctions.current).filter(k => userFunctions.current[k]).map(funcName => (
+                  <button
+                    key={funcName}
+                    onClick={() => callUserFunction(funcName)}
+                    className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-medium transition-all"
+                  >
+                    {funcName}()
+                  </button>
+                ))}
+              </div>
+              
+              <div className="flex gap-3">
+                <button
+                  onClick={clearForm}
+                  className="px-6 py-2.5 bg-gray-600 text-white rounded-lg hover:bg-gray-500 transition-all font-medium text-sm shadow-lg hover:shadow-xl"
+                >
+                  🗑️ Clear
+                </button>
+                <button
+                  onClick={executeAutomation}
+                  disabled={loading}
+                  className="px-8 py-2.5 bg-gradient-to-r from-green-600 to-blue-600 text-white rounded-lg hover:from-green-700 hover:to-blue-700 transition-all font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg hover:shadow-xl"
+                >
+                  {loading ? (
+                    <>
+                      <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                      Loading...
+                    </>
+                  ) : (
+                    <>⚡ Load & Execute</>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -379,13 +444,17 @@ export default function OracleStyleCRM() {
             <div className="text-2xl mb-2">➕</div>
             <div className="font-semibold">New Customer</div>
           </button>
-          <button className="bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-lg transition-all shadow-lg hover:shadow-xl">
+          <button 
+            onClick={() => callUserFunction('validateCustomer')}
+            className="bg-purple-600 hover:bg-purple-700 text-white p-4 rounded-lg transition-all shadow-lg hover:shadow-xl">
             <div className="text-2xl mb-2">🔍</div>
-            <div className="font-semibold">Search</div>
+            <div className="font-semibold">Validate</div>
           </button>
-          <button className="bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg transition-all shadow-lg hover:shadow-xl">
+          <button 
+            onClick={() => callUserFunction('calculateDiscount')}
+            className="bg-green-600 hover:bg-green-700 text-white p-4 rounded-lg transition-all shadow-lg hover:shadow-xl">
             <div className="text-2xl mb-2">📊</div>
-            <div className="font-semibold">Reports</div>
+            <div className="font-semibold">Calculate</div>
           </button>
           <button className="bg-orange-600 hover:bg-orange-700 text-white p-4 rounded-lg transition-all shadow-lg hover:shadow-xl">
             <div className="text-2xl mb-2">⚙️</div>

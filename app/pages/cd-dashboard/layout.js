@@ -18,9 +18,9 @@ export default function DashboardLayout({ children }) {
   };
 
   return (
-    <div className="flex h-screen bg-black">
+    <div className="flex h-screen bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
       {/* Sidebar */}
-      <aside className="w-64 bg-black shadow-lg border-r overflow-y-auto">
+      <aside className="w-64 bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900 shadow-lg border-r overflow-y-auto">
         <div className="p-4 border-b">
           <h1 className="text-xl font-bold text-slate-300"><Link href="/pages/cd-dashboard/">Dashboard</Link></h1>
         </div>

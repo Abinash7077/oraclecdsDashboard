@@ -1,0 +1,38 @@
+// Example: Listen to any field change and call API
+
+// Listen to firstName changes
+onFieldChange('firstName', async (value, formState) => {
+  if (value && value.length >= 2) {
+    console.log('First Name changed:', value);
+    showMessage('Fetching user details...', 'info');
+    
+    const result = await callAPI('/users/search?name=' + value, 'GET');
+    console.log('User API Response:', result);
+  }
+});
+
+// Listen to email changes
+onFieldChange('email', async (value, formState) => {
+  if (value.includes('@')) {
+    console.log('Email changed:', value);
+    const result = await callAPI('/validate-email', 'POST', { email: value });
+    console.log('Email Validation:', result);
+  }
+});
+
+// Listen to status changes
+onFieldChange('status', async (value, formState) => {
+  console.log('Status changed to:', value);
+  showMessage('Status updated to: ' + value, 'success');
+});
+
+// Define submit handler
+handleSubmit(async () => {
+  console.log('\\n=== SUBMITTING FORM ===');
+  console.log('Full Form Data:', form);
+  
+  const result = await callAPI('/customers', 'POST', form);
+  console.log('Submit Response:', result);
+  
+  showMessage('Customer saved successfully!', 'success');
+});

@@ -1,0 +1,61 @@
+// Example: Define any custom functions
+
+// Function gets called when firstName changes
+function onFirstNameChange(value) {
+  console.log('firstName changed to:', value);
+  if (value && value.length >= 2) {
+    showMessage('Searching for: ' + value, 'info');
+    // You can call API here
+    callAPI('/users/search?name=' + value).then(result => {
+      console.log('API Result:', result);
+    });
+  }
+}
+
+// Function gets called when email changes
+function onEmailChange(value) {
+  console.log('email changed to:', value);
+  if (value.includes('@')) {
+    showMessage('Valid email format', 'success');
+  }
+}
+
+// Function gets called on status change
+function onStatusChange(value) {
+  console.log('Status changed to:', value);
+  setField('assignedTo', value === 'Active' ? 'Sales Team' : '');
+}
+
+// Custom submit function
+function onSubmit() {
+  console.log('\\n=== SUBMITTING FORM ===');
+  console.log('All Form Data:', form);
+  
+  // Validate
+  if (!getField('email')) {
+    showMessage('Email is required!', 'error');
+    return;
+  }
+  
+  // Call API
+  callAPI('/customers', 'POST', form).then(result => {
+    console.log('Submit Result:', result);
+    showMessage('Customer saved successfully!', 'success');
+  });
+}
+
+// You can define any custom function
+function validateCustomer() {
+  const name = getField('firstName') + ' ' + getField('lastName');
+  console.log('Validating:', name);
+  return name.length > 3;
+}
+
+function calculateDiscount() {
+  const value = getField('accountValue');
+  if (value > 100000) {
+    console.log('Premium customer - 10% discount');
+    return value * 0.1;
+  }
+  return 0;
+}
